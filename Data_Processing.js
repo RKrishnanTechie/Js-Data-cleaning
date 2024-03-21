@@ -97,25 +97,31 @@ class DataProcessing {
           }
         }
       }
-           // Calculate age based on the formatted date of birth , [put in the cleaning section]email formatting and ids to mail, missing names 
-let calculatedAge = "";
-if (dob) {
-  let [day, month, year] = dob.split('/');
-  let dobDate = new Date(year, month - 1, day);
-  let today = new Date();
-  let age = today.getFullYear() - dobDate.getFullYear();
-  let monthDiff = today.getMonth() - dobDate.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
-    age--;
+           // Convert age to integer if it exists
+let ageInt = null;
+if (age) {
+  if (typeof age === 'string') {
+    // Check if age is in word format
+    const ageWords = {
+      one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+      eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
+      thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90
+    };
+
+    const ageParts = age.toLowerCase().split('-');
+    ageInt = ageParts.reduce((total, part) => total + (ageWords[part] || 0), 0);
+
+    if (ageInt === 0) {
+      // If age is not in word format, try parsing it as a number
+      ageInt = parseInt(age);
+    }
+  } else {
+    ageInt = age;
   }
-  calculatedAge = age.toString();
 }
 
- /// Generate unique key for duplicate names
- let name_key = `${first_name}_${middle_name}_${surname}`;
- if (!name_data[name_key]) {
-   name_data[name_key] = [];
- }
+
+
 
 
  // Format email
@@ -126,13 +132,13 @@ if (dob) {
 
             
 
-            name_data[name_key].push({
+           formatted_data.push({
                 title: title || "",
                 first_name,
                 middle_name: middle_name || "",
                 surname,
                 date_of_birth: dob,
-                age:parseInt(calculatedAge),
+                age:ageInt,
                 email: formatted_email
             });
         }
@@ -147,8 +153,21 @@ if (dob) {
 
     static clean_data() {
       let data = JSON.parse(DataProcessing.formatted_user_data);
-      let name_data = {};
-  
+      let email_data = {};
+
+ // Remove absolute duplicates
+  data = data.filter((item, index, self) =>
+  index === self.findIndex((t) => (
+    t.title === item.title &&
+    t.first_name === item.first_name &&
+    t.middle_name === item.middle_name &&
+    t.surname === item.surname &&
+    t.date_of_birth === item.date_of_birth &&
+    t.age === item.age &&
+    t.email === item.email
+  ))
+);
+        
       for (let item of data) {
         // Check if the title is missing
         if (!item.title.match(/^(Mr|Mrs|Miss|Ms|Dr)\.?$/i)) {
@@ -175,36 +194,62 @@ if (dob) {
             // Only 1 name present or no name present
             if (item.email.includes('@')) {
               let emailParts = item.email.split('@')[0].split('.');
+                  // Extract name from email if name is missing
+              if (!item.first_name && emailParts.length > 0) {
                 item.first_name = emailParts[0].charAt(0).toUpperCase() + emailParts[0].slice(1);
+              }
+              
+              // Extract surname from email if surname is missing
+              if (!item.surname && emailParts.length > 1) {
                 item.surname = emailParts[1].charAt(0).toUpperCase() + emailParts[1].slice(1);
+              }
               
             } 
             item.middle_name = "";
           }
           item.title = "";
         }
-        
-       
- // Generate unique key for duplicate names
- let name_key = `${item.first_name}_${item.middle_name}_${item.surname}`;
- if (!name_data[name_key]) {
-   name_data[name_key] = [];
+         // Calculate age based on the formatted date of birth
+        if (item.date_of_birth) {
+          let [day, month, year] = item.date_of_birth.split('/');
+          let dobDate = new Date(year, month - 1, day);
+          let today = new Date();
+          let age = today.getFullYear() - dobDate.getFullYear();
+          let monthDiff = today.getMonth() - dobDate.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+            age--;
+          }
+          item.age = age;
+        }
+
+ // Generate email based on first_name and surname
+let formatted_email = "";
+if (item.first_name && item.surname) {
+  formatted_email = `${item.first_name.toLowerCase()}.${item.surname.toLowerCase()}@example.com`;
+}
+item.email = formatted_email;
+ // Generate unique key for duplicate emails
+ let email_key = item.email;
+ if (!email_data[email_key]) {
+   email_data[email_key] = [];
  }
- name_data[name_key].push(item);
+ email_data[email_key].push(item);
 }
 
-// Update email for duplicate names
-for (let name_key in name_data) {
- let items = name_data[name_key];
- for (let i = 0; i < items.length; i++) {
-   let item = items[i];
-   let formatted_email = "";
-   if (item.first_name && item.surname) {
-     formatted_email = `${item.first_name.toLowerCase()}.${item.surname.toLowerCase()}${i + 1}@example.com`;
-   }
-   item.email = formatted_email;
- }
-     
+// Update email for duplicate emails
+  for (let email_key in email_data) {
+    let items = email_data[email_key];
+    if (items.length > 1) {
+      // If there are multiple occurrences, add the numeric identifier to the email
+      for (let i = 0; i < items.length; i++) {
+        let item = items[i];
+        let formatted_email = "";
+        if (item.first_name && item.surname) {
+          formatted_email = `${item.first_name.toLowerCase()}.${item.surname.toLowerCase()}${i + 1}@example.com`;
+        }
+        item.email = formatted_email;
+      }
+    }   
     }
         // Sort the properties in the desired order
     DataProcessing.cleaned_user_data = data.map(item => {
